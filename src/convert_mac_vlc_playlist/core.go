@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/sisisin/audio_tools/src/lib"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -46,7 +47,7 @@ func Run() {
 
 func readSourcePlaylist() {
 
-	file := Must1(os.Open(sourcePlaylistFile))
+	file := lib.Must1(os.Open(sourcePlaylistFile))
 	defer file.Close()
 
 	var m3uString []string = []string{"#EXTM3U"}
@@ -64,7 +65,7 @@ func readSourcePlaylist() {
 		log.Fatal(err)
 	}
 
-	outFileName := filepath.Join(outDir, "output.m3u")
+	outFileName := filepath.Join(outDir, "output.m3u8")
 	log.Printf("Writing to %s", outFileName)
 	err := os.WriteFile(outFileName, []byte(strings.Join(m3uString, "\n")), 0644)
 	if err != nil {
@@ -89,11 +90,4 @@ func encodeSourceToDest(source string) (name, dest string) {
 
 	dest = replaceTo + encoded
 	return
-}
-
-func Must1[T any](x T, err error) T {
-	if err != nil {
-		panic(err)
-	}
-	return x
 }
