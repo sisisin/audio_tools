@@ -1,9 +1,7 @@
 package main
 
-import (
-	convertmacvlcplaylist "github.com/sisisin/audio_tools/src/convert_mac_vlc_playlist"
-)
+import "github.com/sisisin/audio_tools/src/converttomacvlcplaylist"
 
 func main() {
-	convertmacvlcplaylist.Run()
+	converttomacvlcplaylist.Run()
 }
