@@ -2,24 +2,15 @@ package converttomacvlcplaylist
 
 import (
 	"bufio"
-	"bytes"
-	"errors"
-	"io"
 	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/sisisin/audio_tools/src/lib"
 	"golang.org/x/text/unicode/norm"
-	"gopkg.in/yaml.v3"
 )
-
-var config = Load[ConvertToMacVlcPlaylistConfig]()
-
-type ConfigBase interface {
-	MatchService() bool
-}
 
 type ConvertToMacVlcPlaylistConfig struct {
 	AtService       string   `yaml:"at_service"`
@@ -35,45 +26,12 @@ func (c ConvertToMacVlcPlaylistConfig) MatchService() bool {
 	return c.AtService == "convert_to_mac_vlc_playlist"
 }
 
-func Load[T ConfigBase]() T {
-	// todo: config file path
-	cfgYaml, err := os.ReadFile("at.config.yaml")
-	if err != nil {
-		log.Panicf("Failed to read config.yaml: %v", err)
-		panic(err)
-	}
-
-	var res *T
-	decoder := yaml.NewDecoder(bytes.NewReader(cfgYaml))
-	for {
-		var configBase T
-		err := decoder.Decode(&configBase)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			panic(err)
-		}
-		if matched := configBase.MatchService(); !matched {
-			continue
-		}
-		res = &configBase
-	}
-
-	if res == nil {
-		log.Panicf("No config matched")
-	}
-	return *res
+func Run(configPath string) {
+	config := lib.Load[ConvertToMacVlcPlaylistConfig](configPath)
+	readSourcePlaylist(config)
 }
 
-func Run() {
-	log.Println("Start")
-
-	readSourcePlaylist()
-}
-
-func readSourcePlaylist() {
-
+func readSourcePlaylist(config ConvertToMacVlcPlaylistConfig) {
 	for _, sourcePlaylist := range config.SourcePlaylists {
 		file, err := os.Open(sourcePlaylist)
 		if err != nil && os.IsNotExist(err) {
@@ -82,13 +40,16 @@ func readSourcePlaylist() {
 		}
 		defer file.Close()
 
-		var m3uString []string = []string{"#EXTM3U"}
+		var m3u8ForVLC []string = []string{"#EXTM3U"}
+		var m3u8 []string = []string{"#EXTM3U"}
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			line := scanner.Text()
 
 			if strings.HasPrefix(line, config.PathReplacement.From) {
-				m3uString = append(m3uString, encodeSourceToDest(line)...)
+				res := encodeSourceToDest(config, line)
+				m3u8ForVLC = append(m3u8ForVLC, res.ForVLC...)
+				m3u8 = append(m3u8, res.ForOthers...)
 			}
 		}
 
@@ -96,20 +57,30 @@ func readSourcePlaylist() {
 			panic(err)
 		}
 
+		outForVLCFileName := filepath.Join(config.OutputDir, strings.Replace(filepath.Base(sourcePlaylist), filepath.Ext(sourcePlaylist), "_vlc"+filepath.Ext(sourcePlaylist), 1))
 		outFileName := filepath.Join(config.OutputDir, filepath.Base(sourcePlaylist))
 		log.Printf("Writing to %s", outFileName)
-		err = os.WriteFile(outFileName, []byte(strings.Join(m3uString, "\n")), 0644)
+		err = os.WriteFile(outFileName, []byte(strings.Join(m3u8, "\n")), 0644)
+		if err != nil {
+			panic(err)
+		}
+		log.Printf("Writing to %s", outForVLCFileName)
+		err = os.WriteFile(outForVLCFileName, []byte(strings.Join(m3u8ForVLC, "\n")), 0644)
 		if err != nil {
 			panic(err)
 		}
 	}
 }
 
-func encodeSourceToDest(source string) []string {
+type M3U8Results struct {
+	ForVLC    []string
+	ForOthers []string
+}
+
+func encodeSourceToDest(config ConvertToMacVlcPlaylistConfig, source string) M3U8Results {
 	prefixRemoved := strings.Replace(source, config.PathReplacement.From, "", 1)
 	slashed := filepath.ToSlash(prefixRemoved)
 	normalized := norm.NFD.String(slashed)
-
 	name := filepath.Base(normalized)
 
 	encoded := ""
@@ -120,6 +91,8 @@ func encodeSourceToDest(source string) []string {
 		encoded += "/" + url.PathEscape(seg)
 	}
 
-	dest := config.PathReplacement.To + encoded
-	return []string{"#EXTINF:-1," + name, dest}
+	return M3U8Results{
+		ForVLC:    []string{"#EXTINF:-1," + name, "file://" + config.PathReplacement.To + encoded},
+		ForOthers: []string{"#EXTINF:-1," + filepath.Base(slashed), config.PathReplacement.To + slashed},
+	}
 }
