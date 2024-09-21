@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/sisisin/audio_tools/src/converttomacvlcplaylist"
+	"github.com/sisisin/audio_tools/src/syncfilestoandroid"
 )
 
 func main() {
@@ -26,6 +27,8 @@ func main() {
 	switch subCommand {
 	case "convertPlaylist":
 		converttomacvlcplaylist.Run(*config)
+	case "syncToAndroid":
+		syncfilestoandroid.Run(*config)
 	default:
 		log.Println("No subcommand matched")
 	}
