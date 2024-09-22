@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime"
 
 	"gopkg.in/yaml.v3"
 )
@@ -72,4 +73,11 @@ func WithDryRunFlag(ctx context.Context, dryRun bool) context.Context {
 func IsDryRun(ctx context.Context) bool {
 	v, _ := ctx.Value(dryRunFlagKey).(bool)
 	return v
+}
+
+func GetNewline() string {
+	if runtime.GOOS == "windows" {
+		return "\r\n"
+	}
+	return "\n"
 }

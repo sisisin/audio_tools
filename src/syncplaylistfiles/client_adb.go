@@ -2,11 +2,12 @@ package syncplaylistfiles
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	pkgerrors "github.com/pkg/errors"
 
 	"github.com/sisisin/audio_tools/src/lib"
 )
@@ -52,10 +53,14 @@ func runCommand(cmd string, args []string) (string, error) {
 	c.Stdout = outWriter
 	c.Stderr = errWriter
 	if err := c.Run(); err != nil {
-		return outWriter.String(), errors.Join(
+		nl := lib.GetNewline()
+		return outWriter.String(), pkgerrors.Wrapf(
 			err,
-			fmt.Errorf("command error occuerd\r\n  command: %s %s\r\n  stdout: %s\r\n  stderr: %s",
-				cmd, strings.Join(args, " "), outWriter.String(), errWriter.String()),
+			"command error occuerd%s  command: %s %s%s  stdout: %s%s  stderr: %s",
+			nl,
+			cmd, strings.Join(args, " "), nl,
+			outWriter.String(), nl,
+			errWriter.String(),
 		)
 	}
 
@@ -63,7 +68,6 @@ func runCommand(cmd string, args []string) (string, error) {
 }
 
 func (*syncClientAdb) ReadDestDir(ctx context.Context, destDir string) (map[string]bool, error) {
-	verbose := lib.IsVerbose(ctx)
 	config := getConfig(ctx)
 	targetDirs := []string{destDir}
 	files := make(map[string]bool)
@@ -85,14 +89,21 @@ func (*syncClientAdb) ReadDestDir(ctx context.Context, destDir string) (map[stri
 			if strings.HasSuffix(line, "/") {
 				targetDirs = append(targetDirs, entry)
 			} else {
-				normalized := filepath.ToSlash(strings.TrimSpace(strings.Replace(entry, config.DestDir, "", 1)))
-				files[normalized] = true
+				rel, err := filepath.Rel(config.DestDir, entry)
+				if err != nil {
+					return nil, pkgerrors.Wrapf(err, "failed to get relative path: %s", entry)
+				}
+				files[filepath.ToSlash(rel)] = true
 			}
 		}
 	}
 
-	if verbose {
-		fmt.Println("ReadDestDir", files)
-	}
 	return files, nil
+}
+
+func (*syncClientAdb) ToDestPath(ctx context.Context, p string) string {
+	config := getConfig(ctx)
+	destPath := filepath.ToSlash(filepath.Join(config.DestDir, filepath.ToSlash(strings.Replace(p, config.SourceBaseDir, "", 1))))
+
+	return destPath
 }

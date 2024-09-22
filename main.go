@@ -38,7 +38,10 @@ func main() {
 	case "convertPlaylist":
 		converttomacvlcplaylist.Run(*config)
 	case "syncPlaylist":
-		syncplaylistfiles.Run(ctx, *config)
+		err := syncplaylistfiles.Run(ctx, *config)
+		if err != nil {
+			log.Fatal(err)
+		}
 	default:
 		log.Println("No subcommand matched")
 	}
