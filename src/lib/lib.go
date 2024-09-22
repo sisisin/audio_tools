@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -49,4 +50,16 @@ func Must1[T any](x T, err error) T {
 		panic(err)
 	}
 	return x
+}
+
+type contextKey string
+
+const verboseFlagKey contextKey = "verbose"
+
+func WithVerboseFlag(ctx context.Context, verbose bool) context.Context {
+	return context.WithValue(ctx, verboseFlagKey, verbose)
+}
+func IsVerbose(ctx context.Context) bool {
+	v, _ := ctx.Value(verboseFlagKey).(bool)
+	return v
 }
