@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
@@ -20,8 +21,10 @@ func main() {
 
 	config := flag.String("config", "at.config.yaml", "config file")
 	verbose := flag.Bool("verbose", false, "verbose output")
+	dryRun := flag.Bool("dry-run", false, "dry run mode")
 	flag.Parse()
 	ctx = lib.WithVerboseFlag(ctx, *verbose)
+	ctx = lib.WithDryRunFlag(ctx, *dryRun)
 
 	subCommand := flag.Arg(0)
 
@@ -30,6 +33,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Printf("start %s\n", subCommand)
 	switch subCommand {
 	case "convertPlaylist":
 		converttomacvlcplaylist.Run(*config)

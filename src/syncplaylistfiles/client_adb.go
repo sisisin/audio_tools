@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/sisisin/audio_tools/src/lib"
@@ -13,11 +13,20 @@ import (
 
 type syncClientAdb struct{}
 
-func (*syncClientAdb) CopyFile(src, dest string) error {
+func (*syncClientAdb) CopyFile(ctx context.Context, src, dest string) error {
+	if lib.IsDryRun(ctx) {
+		fmt.Println("CopyFile", src, dest)
+		return nil
+	}
 	_, err := runCommand("adb", []string{"push", src, dest})
 	return err
 }
-func (*syncClientAdb) RemoveFile(path string) error {
+
+func (*syncClientAdb) RemoveFile(ctx context.Context, path string) error {
+	if lib.IsDryRun(ctx) {
+		fmt.Println("RemoveFile", path)
+		return nil
+	}
 	_, err := runCommand("adb", []string{"shell", fmt.Sprintf("rm '%s'", path)})
 	return err
 }
@@ -39,13 +48,14 @@ func runCommand(cmd string, args []string) (string, error) {
 	c := exec.Command(cmd, args...)
 	outWriter := &memoryWriter{}
 	errWriter := &memoryWriter{}
+
 	c.Stdout = outWriter
 	c.Stderr = errWriter
 	if err := c.Run(); err != nil {
 		return outWriter.String(), errors.Join(
 			err,
-			errors.New(errWriter.String()),
-			fmt.Errorf("command: %s %s", cmd, strings.Join(args, " ")),
+			fmt.Errorf("command error occuerd\r\n  command: %s %s\r\n  stdout: %s\r\n  stderr: %s",
+				cmd, strings.Join(args, " "), outWriter.String(), errWriter.String()),
 		)
 	}
 
@@ -54,6 +64,7 @@ func runCommand(cmd string, args []string) (string, error) {
 
 func (*syncClientAdb) ReadDestDir(ctx context.Context, destDir string) (map[string]bool, error) {
 	verbose := lib.IsVerbose(ctx)
+	config := getConfig(ctx)
 	targetDirs := []string{destDir}
 	files := make(map[string]bool)
 
@@ -66,21 +77,22 @@ func (*syncClientAdb) ReadDestDir(ctx context.Context, destDir string) (map[stri
 			return nil, err
 		}
 		for _, line := range strings.Split(ls, "\n") {
-			entry := path.Join(dir, line)
+			line = strings.TrimSpace(line)
 			if line == "" {
 				continue
 			}
+			entry := filepath.ToSlash(filepath.Join(dir, line))
 			if strings.HasSuffix(line, "/") {
 				targetDirs = append(targetDirs, entry)
 			} else {
-				files[entry] = true
+				normalized := filepath.ToSlash(strings.TrimSpace(strings.Replace(entry, config.DestDir, "", 1)))
+				files[normalized] = true
 			}
 		}
 	}
 
 	if verbose {
 		fmt.Println("ReadDestDir", files)
-		fmt.Println("ReadDestDir", targetDirs)
 	}
 	return files, nil
 }

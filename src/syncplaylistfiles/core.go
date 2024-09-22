@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/sisisin/audio_tools/src/lib"
@@ -22,15 +23,31 @@ func (c SyncPlaylistFilesConfig) MatchService() bool {
 	return c.AtService == "sync_playlist_files"
 }
 
+type contextKey string
+
+const configKey = contextKey("sync_playlist_files")
+
+func withConfig(ctx context.Context, config SyncPlaylistFilesConfig) context.Context {
+	return context.WithValue(ctx, configKey, config)
+}
+func getConfig(ctx context.Context) SyncPlaylistFilesConfig {
+	c, ok := ctx.Value(configKey).(SyncPlaylistFilesConfig)
+	if !ok {
+		panic("config not found")
+	}
+	return c
+}
+
 type syncClient interface {
-	CopyFile(src, dest string) error
-	RemoveFile(path string) error
+	CopyFile(ctx context.Context, src, dest string) error
+	RemoveFile(ctx context.Context, path string) error
 	ReadDestDir(ctx context.Context, destDir string) (map[string]bool, error)
 }
 
 func Run(ctx context.Context, configPath string) {
 	verbose := lib.IsVerbose(ctx)
 	config := lib.Load[SyncPlaylistFilesConfig](configPath)
+	ctx = withConfig(ctx, config)
 	client, err := instantiateSyncClient(config)
 	if err != nil {
 		panic(err)
@@ -47,9 +64,10 @@ func Run(ctx context.Context, configPath string) {
 	{
 		copyTargets := make([][]string, 0)
 		for p := range playlist {
-			destPath := path.Join(config.DestDir, strings.Replace(p, config.SourceBaseDir, "", 1))
-			if !destDirFiles[destPath] {
-				copyTargets = append(copyTargets, []string{p, destPath})
+			if !destDirFiles[p] {
+				destPath := path.Join(config.DestDir, filepath.ToSlash(strings.Replace(p, config.SourceBaseDir, "", 1)))
+				sourcePath := filepath.Join(config.SourceBaseDir, p)
+				copyTargets = append(copyTargets, []string{sourcePath, destPath})
 			}
 		}
 
@@ -58,7 +76,7 @@ func Run(ctx context.Context, configPath string) {
 			fmt.Println("files to copy", copyTargets)
 		}
 		for _, paths := range copyTargets {
-			err := client.CopyFile(paths[0], paths[1])
+			err := client.CopyFile(ctx, paths[0], paths[1])
 			if err != nil {
 				panic(err)
 			}
@@ -66,8 +84,9 @@ func Run(ctx context.Context, configPath string) {
 	}
 	{
 		deleteTargets := make([]string, 0)
-		for destPath := range destDirFiles {
-			if !playlist[path.Join(config.SourceBaseDir, strings.Replace(destPath, config.DestDir, "", 1))] {
+		for p := range destDirFiles {
+			if !playlist[p] {
+				destPath := path.Join(config.SourceBaseDir, filepath.ToSlash(strings.Replace(p, config.DestDir, "", 1)))
 				deleteTargets = append(deleteTargets, destPath)
 			}
 		}
@@ -77,7 +96,7 @@ func Run(ctx context.Context, configPath string) {
 			fmt.Println("files to delete", deleteTargets)
 		}
 		for _, p := range deleteTargets {
-			err := client.RemoveFile(p)
+			err := client.RemoveFile(ctx, p)
 			if err != nil {
 				panic(err)
 			}
@@ -93,7 +112,8 @@ func readPlaylist(playlistPath, sourceBaseDir string) (map[string]bool, error) {
 	paths := make(map[string]bool)
 	for _, line := range strings.Split(string(f), "\n") {
 		if strings.HasPrefix(line, sourceBaseDir) {
-			paths[line] = true
+			normalized := filepath.ToSlash(strings.TrimSpace(strings.Replace(line, sourceBaseDir, "", 1)))
+			paths[normalized] = true
 		}
 	}
 

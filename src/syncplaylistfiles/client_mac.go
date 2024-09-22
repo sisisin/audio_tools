@@ -21,7 +21,7 @@ func instantiateSyncClient(config SyncPlaylistFilesConfig) (syncClient, error) {
 
 type syncClientMac struct{}
 
-func (*syncClientMac) CopyFile(src, dest string) error {
+func (*syncClientMac) CopyFile(ctx context.Context, src, dest string) error {
 	err := os.MkdirAll(filepath.Dir(dest), os.ModePerm)
 	if err != nil {
 		return err
@@ -70,6 +70,6 @@ func (*syncClientMac) ReadDestDir(ctx context.Context, destDir string) (map[stri
 	return paths, nil
 }
 
-func (*syncClientMac) RemoveFile(path string) error {
+func (*syncClientMac) RemoveFile(ctx context.Context, path string) error {
 	return os.Remove(path)
 }

@@ -63,3 +63,13 @@ func IsVerbose(ctx context.Context) bool {
 	v, _ := ctx.Value(verboseFlagKey).(bool)
 	return v
 }
+
+const dryRunFlagKey contextKey = "dryRun"
+
+func WithDryRunFlag(ctx context.Context, dryRun bool) context.Context {
+	return context.WithValue(ctx, dryRunFlagKey, dryRun)
+}
+func IsDryRun(ctx context.Context) bool {
+	v, _ := ctx.Value(dryRunFlagKey).(bool)
+	return v
+}
